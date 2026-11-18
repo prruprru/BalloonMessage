@@ -26,8 +26,21 @@ static int g_height = 62;
 static int g_maxWidth = 360;
 static std::wstring g_fullText;
 static bool g_toolTipActive = false;
+static HHOOK g_mouseHook = nullptr;
+static HHOOK g_keyboardHook = nullptr;
+static HINSTANCE g_module = nullptr;
+static int g_marginLeft = 14;
+static int g_marginTop = 14;
+static int g_marginRight = 14;
+static int g_marginBottom = 14;
 
-static const int SHADOW = 14;
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
+{
+    if (reason == DLL_PROCESS_ATTACH)
+        g_module = hModule;
+    return TRUE;
+}
+
 static const int BODY_HEIGHT = 34;
 static const UINT_PTR TIMER_ID = 1;
 static const UINT TIMER_INTERVAL = 40;
@@ -114,8 +127,10 @@ static void DestroyToolTip()
 
 static bool CreateToolTip()
 {
+    bool needToolTip = g_toolTipActive;
     DestroyToolTip();
-    if (!g_toolTipActive || g_fullText.empty() || !g_hwnd) return true;
+    g_toolTipActive = needToolTip;
+    if (!needToolTip || g_fullText.empty() || !g_hwnd) return true;
 
     g_hwndToolTip = CreateWindowExW(
         WS_EX_TOPMOST,
@@ -149,9 +164,9 @@ static bool CreateToolTip()
 
 static void DrawBalloon(HDC screen, int x, int y, COLORREF backColor, COLORREF foreColor, COLORREF borderColor)
 {
-    const int bodyX = SHADOW;
-    const int bodyY = SHADOW;
-    const int bodyW = g_width - SHADOW * 2;
+    const int bodyX = g_marginLeft;
+    const int bodyY = g_marginTop;
+    const int bodyW = g_width - g_marginLeft - g_marginRight;
     const int bodyH = BODY_HEIGHT;
 
     Bitmap bitmap(g_width, g_height, PixelFormat32bppARGB);
@@ -216,6 +231,12 @@ static void DrawBalloon(HDC screen, int x, int y, COLORREF backColor, COLORREF f
     DeleteObject(hBitmap);
 }
 
+static void RemoveInputHooks()
+{
+    if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
+    if (g_keyboardHook) { UnhookWindowsHookEx(g_keyboardHook); g_keyboardHook = nullptr; }
+}
+
 static void HideBalloonInternal(HWND hwnd)
 {
     if (g_timer)
@@ -224,8 +245,52 @@ static void HideBalloonInternal(HWND hwnd)
         g_timer = 0;
     }
     g_timeoutAt = 0;
+    RemoveInputHooks();
     HideToolTip();
     ShowWindow(hwnd, SW_HIDE);
+}
+
+static bool PointInsideWindow(HWND hwnd, POINT pt)
+{
+    if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd)) return false;
+    RECT rc;
+    GetWindowRect(hwnd, &rc);
+    return PtInRect(&rc, pt) != FALSE;
+}
+
+static LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wp, LPARAM lp)
+{
+    if (code == HC_ACTION && g_hwnd && IsWindowVisible(g_hwnd) &&
+        (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN || wp == WM_MBUTTONDOWN ||
+         wp == WM_NCLBUTTONDOWN || wp == WM_NCRBUTTONDOWN || wp == WM_NCMBUTTONDOWN))
+    {
+        const MSLLHOOKSTRUCT* info = reinterpret_cast<const MSLLHOOKSTRUCT*>(lp);
+        POINT pt = info->pt;
+        if (!PointInsideWindow(g_hwnd, pt) && !PointInsideWindow(g_hwndToolTip, pt))
+            HideBalloonInternal(g_hwnd);
+    }
+    return CallNextHookEx(g_mouseHook, code, wp, lp);
+}
+
+static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wp, LPARAM lp)
+{
+    if (code == HC_ACTION && g_hwnd && IsWindowVisible(g_hwnd) &&
+        (wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN))
+        HideBalloonInternal(g_hwnd);
+    return CallNextHookEx(g_keyboardHook, code, wp, lp);
+}
+
+static bool InstallInputHooks()
+{
+    RemoveInputHooks();
+    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, g_module, 0);
+    g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, g_module, 0);
+    if (!g_mouseHook || !g_keyboardHook)
+    {
+        RemoveInputHooks();
+        return false;
+    }
+    return true;
 }
 
 static LRESULT CALLBACK BalloonProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -241,6 +306,7 @@ static LRESULT CALLBACK BalloonProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     if (msg == WM_ERASEBKGND) return 1;
     if (msg == WM_DESTROY)
     {
+        RemoveInputHooks();
         if (g_timer)
         {
             KillTimer(hwnd, g_timer);
@@ -256,6 +322,7 @@ static LRESULT CALLBACK BalloonProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 static bool EnsureWindow()
 {
     if (g_hwnd && IsWindow(g_hwnd)) return true;
+    if (!g_module) g_module = GetModuleHandleW(L"BalloonMessage.dll");
 
     if (!g_gdiplusToken)
     {
@@ -287,7 +354,8 @@ static bool EnsureWindow()
 }
 
 extern "C" __declspec(dllexport) int WINAPI BM_ShowEx(
-    HWND owner, int x, int y, LPCSTR text, int timeoutMs, COLORREF backColor, int maxWidth)
+    HWND owner, int x, int y, LPCSTR text, int timeoutMs, COLORREF backColor, int maxWidth,
+    int marginLeft, int marginTop, int marginRight, int marginBottom)
 {
     if (!EnsureWindow()) return 0;
 
@@ -296,14 +364,20 @@ extern "C" __declspec(dllexport) int WINAPI BM_ShowEx(
 
     g_maxWidth = maxWidth <= 0 ? 360 : maxWidth;
     g_maxWidth = std::max(120, std::min(g_maxWidth, 1200));
+    g_marginLeft = std::max(0, std::min(marginLeft, 64));
+    g_marginTop = std::max(0, std::min(marginTop, 64));
+    g_marginRight = std::max(0, std::min(marginRight, 64));
+    g_marginBottom = std::max(0, std::min(marginBottom, 64));
 
     const int measuredWidth = MeasureTextWidth(g_fullText);
-    const int maxBodyWidth = g_maxWidth - SHADOW * 2;
-    const int desiredBodyWidth = measuredWidth + 24;
+    const int textPadding = 24;
+    const int horizontalMargins = g_marginLeft + g_marginRight;
+    const int maxBodyWidth = std::max(80, g_maxWidth - horizontalMargins);
+    const int desiredBodyWidth = measuredWidth + textPadding;
     const int bodyWidth = std::max(80, std::min(desiredBodyWidth, maxBodyWidth));
 
-    g_width = bodyWidth + SHADOW * 2;
-    g_height = BODY_HEIGHT + SHADOW * 2;
+    g_width = bodyWidth + horizontalMargins;
+    g_height = BODY_HEIGHT + g_marginTop + g_marginBottom;
     g_toolTipActive = desiredBodyWidth > maxBodyWidth;
 
     COLORREF foreColor = ContrastColor(backColor);
@@ -348,6 +422,11 @@ extern "C" __declspec(dllexport) int WINAPI BM_ShowEx(
         }
     }
 
+    if (!InstallInputHooks())
+    {
+        HideBalloonInternal(g_hwnd);
+        return 0;
+    }
     return 1;
 }
 
