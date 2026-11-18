@@ -1,0 +1,7 @@
+LIBRARY "BalloonMessage"
+EXPORTS
+    BM_ShowEx=_BM_ShowEx@28
+    BM_Hide=_BM_Hide@0
+    BM_Destroy=_BM_Destroy@0
+    BM_IsVisible=_BM_IsVisible@0
+    BM_Version=_BM_Version@0
