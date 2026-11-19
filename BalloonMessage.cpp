@@ -366,7 +366,7 @@ extern "C" __declspec(dllexport) int WINAPI BM_ShowEx(
     if (g_fullText.empty()) return 0;
 
     g_maxWidth = maxWidth <= 0 ? 360 : maxWidth;
-    g_maxWidth = std::max(120, std::min(g_maxWidth, 1200));
+    g_maxWidth = std::max(120, std::min(g_maxWidth, 300));
     g_marginLeft = std::max(0, std::min(marginLeft, MAX_MARGIN));         // CAMBIO: antes 64
     g_marginTop = std::max(0, std::min(marginTop, MAX_MARGIN));           // CAMBIO: antes 64
     g_marginRight = std::max(0, std::min(marginRight, MAX_MARGIN));       // CAMBIO: antes 64
