@@ -44,7 +44,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 static const int BODY_HEIGHT = 15;                        // CAMBIO: antes 34
 static const UINT_PTR TIMER_ID = 1;
 static const UINT TIMER_INTERVAL = 40;
-static const REAL CORNER_RADIUS = 7.0f;                   // CAMBIO: antes 9.0f (diametro 14 <= alto 15)
+static const REAL CORNER_RADIUS = 3.0f;                   // CAMBIO: antes 9.0f (diametro 14 <= alto 15)
 static const int MAX_MARGIN = 1000;                       // CAMBIO: antes el tope era 64
 static const wchar_t* const FONT_NAME = L"Segoe UI";      // CAMBIO: antes Tahoma
 static const REAL FONT_SIZE = 12.0f;                      // CAMBIO: 9 pt a 96 DPI, en pixeles (UnitPixel)
