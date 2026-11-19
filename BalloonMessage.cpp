@@ -41,10 +41,13 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
     return TRUE;
 }
 
-static const int BODY_HEIGHT = 34;
+static const int BODY_HEIGHT = 15;                        // CAMBIO: antes 34
 static const UINT_PTR TIMER_ID = 1;
 static const UINT TIMER_INTERVAL = 40;
-static const REAL CORNER_RADIUS = 9.0f;
+static const REAL CORNER_RADIUS = 7.0f;                   // CAMBIO: antes 9.0f (diametro 14 <= alto 15)
+static const int MAX_MARGIN = 1000;                       // CAMBIO: antes el tope era 64
+static const wchar_t* const FONT_NAME = L"Segoe UI";      // CAMBIO: antes Tahoma
+static const REAL FONT_SIZE = 12.0f;                      // CAMBIO: 9 pt a 96 DPI, en pixeles (UnitPixel)
 
 static std::wstring ToWide(LPCSTR value)
 {
@@ -100,8 +103,8 @@ static int MeasureTextWidth(const std::wstring& text)
 {
     Bitmap measureBitmap(1, 1, PixelFormat32bppARGB);
     Graphics gr(&measureBitmap);
-    FontFamily family(L"Tahoma");
-    Font font(&family, 12.0f, FontStyleRegular, UnitPixel);
+    FontFamily family(FONT_NAME);                                   // CAMBIO
+    Font font(&family, FONT_SIZE, FontStyleRegular, UnitPixel);     // CAMBIO
     StringFormat format;
     format.SetFormatFlags(StringFormatFlagsNoWrap);
     RectF bounds(0.0f, 0.0f, 10000.0f, 40.0f);
@@ -184,7 +187,7 @@ static void DrawBalloon(HDC screen, int x, int y, COLORREF backColor, COLORREF f
             static_cast<REAL>(bodyY - i / 2 + 5),
             static_cast<REAL>(bodyW + i),
             static_cast<REAL>(bodyH + i),
-            9.0f + i * 0.25f);
+            CORNER_RADIUS + i * 0.25f);                              // CAMBIO: antes 9.0f + i * 0.25f
         SolidBrush shadowBrush(Color(alpha, 0, 0, 0));
         gr.FillPath(&shadowBrush, &shadowPath);
     }
@@ -200,19 +203,19 @@ static void DrawBalloon(HDC screen, int x, int y, COLORREF backColor, COLORREF f
     gr.FillPath(&background, &bodyPath);
     gr.DrawPath(&border, &bodyPath);
 
-    FontFamily family(L"Tahoma");
-    Font font(&family, 12.0f, FontStyleRegular, UnitPixel);
+    FontFamily family(FONT_NAME);                                   // CAMBIO
+    Font font(&family, FONT_SIZE, FontStyleRegular, UnitPixel);     // CAMBIO
     StringFormat format;
     format.SetTrimming(StringTrimmingEllipsisCharacter);
-    format.SetFormatFlags(StringFormatFlagsNoWrap | StringFormatFlagsLineLimit);
+    format.SetFormatFlags(StringFormatFlagsNoWrap | StringFormatFlagsNoClip);   // CAMBIO: antes NoWrap | LineLimit
     format.SetAlignment(StringAlignmentNear);
     format.SetLineAlignment(StringAlignmentCenter);
 
     RectF textRect(
         static_cast<REAL>(bodyX + 12),
-        static_cast<REAL>(bodyY + 2),
+        static_cast<REAL>(bodyY),                                    // CAMBIO: antes bodyY + 2
         static_cast<REAL>(bodyW - 24),
-        static_cast<REAL>(bodyH - 4));
+        static_cast<REAL>(bodyH));                                   // CAMBIO: antes bodyH - 4
 
     gr.DrawString(g_fullText.c_str(), -1, &font, textRect, &format, &foreground);
 
@@ -364,10 +367,10 @@ extern "C" __declspec(dllexport) int WINAPI BM_ShowEx(
 
     g_maxWidth = maxWidth <= 0 ? 360 : maxWidth;
     g_maxWidth = std::max(120, std::min(g_maxWidth, 1200));
-    g_marginLeft = std::max(0, std::min(marginLeft, 64));
-    g_marginTop = std::max(0, std::min(marginTop, 64));
-    g_marginRight = std::max(0, std::min(marginRight, 64));
-    g_marginBottom = std::max(0, std::min(marginBottom, 64));
+    g_marginLeft = std::max(0, std::min(marginLeft, MAX_MARGIN));         // CAMBIO: antes 64
+    g_marginTop = std::max(0, std::min(marginTop, MAX_MARGIN));           // CAMBIO: antes 64
+    g_marginRight = std::max(0, std::min(marginRight, MAX_MARGIN));       // CAMBIO: antes 64
+    g_marginBottom = std::max(0, std::min(marginBottom, MAX_MARGIN));     // CAMBIO: antes 64
 
     const int measuredWidth = MeasureTextWidth(g_fullText);
     const int textPadding = 24;
@@ -446,6 +449,7 @@ extern "C" __declspec(dllexport) int WINAPI BM_Destroy()
         g_hwnd = nullptr;
     }
     DestroyToolTip();
+    UnregisterClassW(L"VFP_GDIPlus_CompactBalloon", GetModuleHandleW(nullptr));   // CAMBIO: linea nueva (opcional)
     if (g_gdiplusToken)
     {
         GdiplusShutdown(g_gdiplusToken);
@@ -461,5 +465,5 @@ extern "C" __declspec(dllexport) int WINAPI BM_IsVisible()
 
 extern "C" __declspec(dllexport) int WINAPI BM_Version()
 {
-    return 100;
+    return 101;                                                       // CAMBIO: antes 100 (para verificar que VFP carga el binario nuevo)
 }
