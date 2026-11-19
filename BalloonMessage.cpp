@@ -212,9 +212,9 @@ static void DrawBalloon(HDC screen, int x, int y, COLORREF backColor, COLORREF f
     format.SetLineAlignment(StringAlignmentCenter);
 
     RectF textRect(
-        static_cast<REAL>(bodyX + 12),
+        static_cast<REAL>(bodyX + g_marginLeft),
         static_cast<REAL>(bodyY),                                    // CAMBIO: antes bodyY + 2
-        static_cast<REAL>(bodyW - 24),
+        static_cast<REAL>(bodyW - g_marginLeft - g_marginRight),
         static_cast<REAL>(bodyH));                                   // CAMBIO: antes bodyH - 4
 
     gr.DrawString(g_fullText.c_str(), -1, &font, textRect, &format, &foreground);
@@ -373,10 +373,9 @@ extern "C" __declspec(dllexport) int WINAPI BM_ShowEx(
     g_marginBottom = std::max(0, std::min(marginBottom, MAX_MARGIN));     // CAMBIO: antes 64
 
     const int measuredWidth = MeasureTextWidth(g_fullText);
-    const int textPadding = 24;
     const int horizontalMargins = g_marginLeft + g_marginRight;
     const int maxBodyWidth = std::max(80, g_maxWidth - horizontalMargins);
-    const int desiredBodyWidth = measuredWidth + textPadding;
+    const int desiredBodyWidth = measuredWidth + horizontalMargins;
     const int bodyWidth = std::max(80, std::min(desiredBodyWidth, maxBodyWidth));
 
     g_width = bodyWidth + horizontalMargins;
